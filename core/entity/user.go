@@ -3,12 +3,24 @@ package entity
 import (
 	errorutil "article-versioning-api/utils/error"
 	"fmt"
+
+	"github.com/gin-gonic/gin"
 )
 
 const (
 	ContextUsername = "username"
 	ContextRole     = "role"
 )
+
+func GetContextUsername(ctx *gin.Context) string {
+	username, _ := ctx.Get(ContextUsername)
+	return username.(string)
+}
+
+func GetContextRole(ctx *gin.Context) string {
+	role, _ := ctx.Get(ContextRole)
+	return role.(string)
+}
 
 type RegisterUserRequest struct {
 	Username string
@@ -38,6 +50,7 @@ const (
 	UserRoleAdmin
 	UserRoleWriter
 	UserRoleEditor
+	UserRoleReader
 )
 
 var (
@@ -45,11 +58,13 @@ var (
 		UserRoleAdmin:  "admin",
 		UserRoleWriter: "writer",
 		UserRoleEditor: "editor",
+		UserRoleReader: "reader",
 	}
 	mapStringToUserRole = map[string]UserRole{
 		"admin":  UserRoleAdmin,
 		"writer": UserRoleWriter,
 		"editor": UserRoleEditor,
+		"reader": UserRoleReader,
 	}
 )
 

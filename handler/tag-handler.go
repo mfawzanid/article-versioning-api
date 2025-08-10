@@ -3,25 +3,23 @@ package handler
 import (
 	"article-versioning-api/core/entity"
 	"article-versioning-api/core/usecase"
-	"net/http"
-
 	errorutil "article-versioning-api/utils/error"
 	generalutil "article-versioning-api/utils/general"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-type userHandler struct {
-	userUsecase usecase.UserUsecaseInterface
+type tagHandler struct {
+	tagUsecase usecase.TagUsecaseInterface
 }
 
-func NewUserHandler(userUsecase usecase.UserUsecaseInterface) *userHandler {
-	return &userHandler{userUsecase}
+func NewTagHandler(tagUsecase usecase.TagUsecaseInterface) *tagHandler {
+	return &tagHandler{tagUsecase}
 }
 
-func (h *userHandler) RegisterUser(c *gin.Context) {
-	req := &entity.RegisterUserRequest{}
-
+func (h *tagHandler) CreateTag(c *gin.Context) {
+	req := &entity.CreateTagRequest{}
 	if err := c.ShouldBind(req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
@@ -29,7 +27,7 @@ func (h *userHandler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	err := h.userUsecase.RegisterUser(req)
+	serial, err := h.tagUsecase.CreateTag(req)
 	if err != nil {
 		switch errorutil.GetErrorType(err) {
 		case errorutil.ErrBadRequest:
@@ -48,13 +46,12 @@ func (h *userHandler) RegisterUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		message: "username created successfully",
+		"serial": serial,
 	})
 }
 
-func (h *userHandler) Login(c *gin.Context) {
-	req := &entity.LoginRequest{}
-
+func (h *tagHandler) GetTags(c *gin.Context) {
+	req := &entity.GetTagsRequest{}
 	if err := c.ShouldBind(req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
@@ -62,7 +59,9 @@ func (h *userHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.userUsecase.Login(req)
+	req.Pagination = entity.ParseToPagination(req.Page, req.PageSize) // TODO: move to usecase?
+
+	resp, err := h.tagUsecase.GetTags(req)
 	if err != nil {
 		switch errorutil.GetErrorType(err) {
 		case errorutil.ErrBadRequest:
@@ -80,7 +79,29 @@ func (h *userHandler) Login(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-	})
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *tagHandler) GetTagBySerial(c *gin.Context) {
+	serial, _ := c.Params.Get("serial")
+
+	resp, err := h.tagUsecase.GetTagBySerial(serial)
+	if err != nil {
+		switch errorutil.GetErrorType(err) {
+		case errorutil.ErrBadRequest:
+			c.JSON(http.StatusBadRequest, generalutil.MapAny{
+				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
+			})
+			return
+		default:
+			if c != nil {
+				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
+					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
+				})
+				return
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

@@ -8,7 +8,6 @@ import (
 
 const (
 	Error   = "error"
-	Message = "message"
 )
 
 type CustomError struct {
