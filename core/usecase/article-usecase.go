@@ -147,11 +147,11 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 		if !isPublishedStatus(currStatus) && isPublishedStatus(newStatus) { // publish
 			if currPublishedVersion != nil { // need handle previous published version
 				// update previous published version to draft
-				err = u.articleRepo.UpdateArticleVersionStatus(&entity.UpdateArticleVersionStatusRequest{
+				err = u.articleRepo.UpdateArticleVersionStatus(tx, &entity.UpdateArticleVersionStatusRequest{
 					ArticleSerial: req.ArticleSerial,
 					VersionSerial: currPublishedVersion.Serial,
 					NewStatus: entity.VersionStatusDraft.String(),
-				}, tx)
+				})
 				if err != nil {
 					return err
 				}
@@ -178,7 +178,7 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 	}
 
 	// update to new status
-	err = u.articleRepo.UpdateArticleVersionStatus(req, tx)
+	err = u.articleRepo.UpdateArticleVersionStatus(tx, req)
 	if err != nil {
 		return err
 	}
@@ -296,25 +296,37 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 		return errorutil.NewCustomError(errorutil.ErrBadRequest, errors.New("error delete article: article serial is mandatory"))
 	}
 
-	tx, err := u.articleRepo.GetDb().Begin()
+	var currPublishedVersion *entity.Version
+	publishedVersions, err := u.articleRepo.GetVersionsByQuery(&entity.GetVersionsByQueryRequest{
+		ArticleSerial: articleSerial,
+		Status: entity.VersionStatusPublished.String(),
+	})
 	if err != nil {
-		return fmt.Errorf("error delete article: failed to begin transaction: %s", err.Error())
+		return fmt.Errorf("error get published version: %s", err.Error())
 	}
-
-	defer func() {
-		err = transactionutil.SettleTransaction(tx, err)
-	}()
+	if len(publishedVersions) > 0 {
+		currPublishedVersion = publishedVersions[0]
+	}
+	
+	tx := u.transactionPkg.InitTransaction()
+	defer u.transactionPkg.SettleTransaction(tx, err)
 
 	err = u.articleRepo.DeleteArticle(tx, articleSerial)
 	if err != nil {
 		return err
 	}
 
-	// TODO: calculate usage_count
-
 	err = u.articleRepo.DeleteVersionByArticleSerial(tx, articleSerial)
 	if err != nil {
 		return err
+	}
+
+	if currPublishedVersion != nil {
+		// decrement tag usage count the previous pubslihed version
+		err = u.tagRepo.DecrementUsageCount(currPublishedVersion.TagSerials(), tx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

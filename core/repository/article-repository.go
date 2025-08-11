@@ -13,9 +13,9 @@ type ArticleRepositoryInterface interface {
 	InsertArticleTx(tx *sql.Tx, article *entity.Article) error
 	InsertVersionTx(tx *sql.Tx, version *entity.Version) error
 	InsertVersionTagsTx(tx *sql.Tx, versionSerial string, tagSerials []string) error
-	UpdateArticleVersionStatus(req *entity.UpdateArticleVersionStatusRequest, conn *gorm.DB) error
-	DeleteArticle(tx *sql.Tx, serial string) error
-	DeleteVersionByArticleSerial(tx *sql.Tx, articleSerial string) error
+	UpdateArticleVersionStatus(tx *gorm.DB, req *entity.UpdateArticleVersionStatusRequest) error
+	DeleteArticle(tx *gorm.DB, serial string) error
+	DeleteVersionByArticleSerial(tx *gorm.DB, articleSerial string) error
 	GetLatestVersionNumber(articleSerial string) (int, error)
 	GetArticles(req *entity.GetArticlesRequest) (*entity.GetArticlesResponse, error)
 	GetArticleLatestDetail(articleSerial string) ([]*entity.Version, error)

@@ -79,7 +79,7 @@ func (r *articleRepository) InsertVersionTagsTx(tx *sql.Tx, versionSerial string
 	return nil
 }
 
-func (r *articleRepository) UpdateArticleVersionStatus(req *entity.UpdateArticleVersionStatusRequest, tx *gorm.DB) error {
+func (r *articleRepository) UpdateArticleVersionStatus(tx *gorm.DB, req *entity.UpdateArticleVersionStatusRequest) error {
 	conn := transactionutil.GetTransaction(tx)
 	if conn == nil {
 		conn = r.gormDB
@@ -96,10 +96,15 @@ func (r *articleRepository) UpdateArticleVersionStatus(req *entity.UpdateArticle
 	return nil
 }
 
-func (r *articleRepository) DeleteArticle(tx *sql.Tx, serial string) error {
-	query := `UPDATE articles SET deleted_at = $1 WHERE serial = $2`
+func (r *articleRepository) DeleteArticle(tx *gorm.DB, serial string) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
 
-	_, err := tx.Exec(query, time.Now(), serial)
+	query := `UPDATE articles SET deleted_at = NOW(), updated_at = NOW() WHERE serial = ?`
+
+	err := conn.Exec(query, serial).Error
 	if err != nil {
 		return fmt.Errorf("error repo delete article: %v", err.Error())
 	}
@@ -107,10 +112,15 @@ func (r *articleRepository) DeleteArticle(tx *sql.Tx, serial string) error {
 	return nil
 }
 
-func (r *articleRepository) DeleteVersionByArticleSerial(tx *sql.Tx, articleSerial string) error {
-	query := `UPDATE versions SET status = $1, deleted_at = $2 WHERE article_serial = $3`
+func (r *articleRepository) DeleteVersionByArticleSerial(tx *gorm.DB, articleSerial string) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
 
-	_, err := tx.Exec(query, entity.VersionStatusDeleted.String(), time.Now(), articleSerial)
+	query := `UPDATE versions SET status = ?, deleted_at = NOW(), updated_at = NOW(), published_at = NULL WHERE article_serial = ?`
+
+	err := conn.Exec(query, entity.VersionStatusDeleted.String(), articleSerial).Error
 	if err != nil {
 		return fmt.Errorf("error repo delete version: %v", err.Error())
 	}
