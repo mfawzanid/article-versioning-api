@@ -7,6 +7,7 @@ import (
 	articlerepository "article-versioning-api/repository/article"
 	tagrepository "article-versioning-api/repository/tag"
 	userrepository "article-versioning-api/repository/user"
+	transactionutil "article-versioning-api/utils/transaction"
 	"database/sql"
 	"log"
 
@@ -38,14 +39,16 @@ func main() {
 		panic(err)
 	}
 
+	transactionPkg := transactionutil.NewConnection(gormDB)
+
 	userRepo := userrepository.NewUserRepository(db, cfg)
 	articleRepo := articlerepository.NewArticleRepository(db, cfg, gormDB)
 	tagRepo := tagrepository.NewTagRepository(db, gormDB)
 
 	authUsecase := usecase.NewAuthUsecase()
 	userUsecase := usecase.NewUserUsecase(userRepo, authUsecase)
-	articleUsecase := usecase.NewArticleUsecase(articleRepo)
-	tagUsecase := usecase.NewTagUsecase(tagRepo)
+	articleUsecase := usecase.NewArticleUsecase(articleRepo, tagRepo, transactionPkg)
+	tagUsecase := usecase.NewTagUsecase(tagRepo, transactionPkg)
 
 	userHandler := handler.NewUserHandler(userUsecase)
 	authHandler := handler.NewAuthHandler(authUsecase)

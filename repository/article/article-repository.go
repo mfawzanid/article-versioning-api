@@ -5,6 +5,7 @@ import (
 	"article-versioning-api/core/entity"
 	"article-versioning-api/core/repository"
 	errorutil "article-versioning-api/utils/error"
+	transactionutil "article-versioning-api/utils/transaction"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -78,11 +79,16 @@ func (r *articleRepository) InsertVersionTagsTx(tx *sql.Tx, versionSerial string
 	return nil
 }
 
-func (r *articleRepository) UpdateArticleVersionStatus(req *entity.UpdateArticleVersionStatusRequest) error {
-	query := `UPDATE versions SET status = $1, updated_at = $2, published_at = $3 WHERE serial = $4 AND article_serial = $5`
+func (r *articleRepository) UpdateArticleVersionStatus(req *entity.UpdateArticleVersionStatusRequest, tx *gorm.DB) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+
+	query := `UPDATE versions SET status = ?, updated_at = ?, published_at = ? WHERE serial = ? AND article_serial = ?`
 
 	timeNow := time.Now()
-	_, err := r.db.Exec(query, req.NewStatus, timeNow, timeNow, req.VersionSerial, req.ArticleSerial)
+	err := conn.Exec(query, req.NewStatus, timeNow, timeNow, req.VersionSerial, req.ArticleSerial).Error
 	if err != nil {
 		return fmt.Errorf("error repo update article version status: %v", err.Error())
 	}
@@ -219,20 +225,26 @@ func (r *articleRepository) GetArticleLatestDetail(articleSerial string) ([]*ent
 	return versions, nil
 }
 
-func (r *articleRepository) GetVersionsByArticleSerial(articleSerial string) ([]*entity.Version, error) {
+func (r *articleRepository) GetVersionsByQuery(req *entity.GetVersionsByQueryRequest) ([]*entity.Version, error) {
 	dtoVersions := []*Version{}
 
-	err := r.gormDB.Table("versions").
-		Where("article_serial = ?", articleSerial).
-		Order("version_number ASC").
-		Scan(&dtoVersions).Error
+	db := r.gormDB.Table("versions")
+		
+	if req.ArticleSerial != "" {
+		db = db.Where("article_serial = ?", req.ArticleSerial)
+	}
+	if req.Status != "" {
+		db = db.Where("status = ?", req.Status)
+	}
+
+	err := db.Order("version_number ASC").Scan(&dtoVersions).Error
 	if err != nil {
-		return nil, fmt.Errorf("error repo get versions by article serial: %s", err.Error())
+		return nil, fmt.Errorf("error repo get versions by query: %s", err.Error())
 	}
 
 	versions, err := r.parseDTOToVersions(dtoVersions)
 	if err != nil {
-		return nil, fmt.Errorf("error repo get versions by article serial: %s", err)
+		return nil, fmt.Errorf("error repo get versions by query: %s", err)
 	}
 
 	return versions, nil

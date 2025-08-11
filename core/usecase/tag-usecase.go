@@ -5,12 +5,14 @@ import (
 	"article-versioning-api/core/repository"
 	errorutil "article-versioning-api/utils/error"
 	serialutil "article-versioning-api/utils/serial"
+	transactionutil "article-versioning-api/utils/transaction"
 	"errors"
 	"fmt"
 )
 
 type tagUsecase struct {
 	tagRepo repository.TagRepositoryInterface
+	transactionPkg        transactionutil.Transaction
 }
 
 type TagUsecaseInterface interface {
@@ -19,8 +21,8 @@ type TagUsecaseInterface interface {
 	GetTagBySerial(serial string) (*entity.TagDetail, error)
 }
 
-func NewTagUsecase(tagRepo repository.TagRepositoryInterface) TagUsecaseInterface {
-	return &tagUsecase{tagRepo}
+func NewTagUsecase(tagRepo repository.TagRepositoryInterface, transactionPkg transactionutil.Transaction) TagUsecaseInterface {
+	return &tagUsecase{tagRepo, transactionPkg}
 }
 
 const (
@@ -37,10 +39,18 @@ func (u *tagUsecase) CreateTag(req *entity.CreateTagRequest) (serial string, err
 		return "", fmt.Errorf("error create tag: error generate serial: %s", err.Error())
 	}
 
+	tx := u.transactionPkg.InitTransaction()
+	defer u.transactionPkg.SettleTransaction(tx, err)
+
 	err = u.tagRepo.InsertTag(&entity.Tag{
 		Serial: serial,
 		Name:   req.Name,
-	})
+	}, tx)
+	if err != nil {
+		return "", err
+	}
+
+	err = u.tagRepo.InsertTagStat(serial, tx)
 	if err != nil {
 		return "", err
 	}

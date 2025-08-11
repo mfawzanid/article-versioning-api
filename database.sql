@@ -33,6 +33,8 @@ CREATE TABLE versions (
     UNIQUE(article_serial, serial)
 );
 
+CREATE UNIQUE INDEX one_published_per_article ON versions(article_serial) WHERE status = 'published';
+
 CREATE TABLE tags (
     id SERIAL PRIMARY KEY,
     serial VARCHAR(25) NOT NULL,

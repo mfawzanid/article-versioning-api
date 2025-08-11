@@ -20,7 +20,7 @@ const (
 type CreateArticleRequest struct {
 	Title      string
 	Content    string
-	TagSerials []string
+	TagSerials []string // TODO: Meskipun tag juga bisa dibuat secara implisit saat membuat/memperbarui artikel
 }
 
 func (r *CreateArticleRequest) Validate() error {
@@ -88,6 +88,24 @@ type Version struct {
 	PublishedAt          *time.Time `json:"publishedAt"`
 	TagRelationshipScore float32    `json:"tagRelationshipScore"`
 	Tags                 []*Tag     `json:"tags"`
+}
+
+func (v *Version) TagSerials() []string {
+	tagMap := make(map[string]int)
+	tagSerials := []string{}
+
+	for _, tag := range v.Tags {
+		// make sure there is no duplicate tag serial
+		total, ok := tagMap[tag.Serial]
+		if ok || total > 0 {
+			continue
+		}
+
+		tagSerials = append(tagSerials, tag.Serial)
+		tagMap[tag.Serial]++
+	}
+
+	return tagSerials
 }
 
 type CreateArticleResponse struct {
@@ -207,4 +225,9 @@ type GetVersionsByArticleSerialResponse struct {
 type GetTagsResponse struct {
 	Tags       []*TagDetail `json:"tags"`
 	Pagination *Pagination  `json:"pagination"`
+}
+
+type GetVersionsByQueryRequest struct {
+	ArticleSerial string
+	Status 		  string
 }

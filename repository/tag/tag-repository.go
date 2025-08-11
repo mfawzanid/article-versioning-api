@@ -3,6 +3,7 @@ package tagrepository
 import (
 	"article-versioning-api/core/entity"
 	"article-versioning-api/core/repository"
+	transactionutil "article-versioning-api/utils/transaction"
 	"database/sql"
 	"fmt"
 
@@ -18,12 +19,33 @@ func NewTagRepository(db *sql.DB, gormDB *gorm.DB) repository.TagRepositoryInter
 	return &tagRepository{db, gormDB}
 }
 
-func (r *tagRepository) InsertTag(tag *entity.Tag) error {
-	query := `INSERT INTO tags (serial, name) VALUES ($1, $2)`
+func (r *tagRepository) InsertTag(tag *entity.Tag, tx *gorm.DB) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
 
-	_, err := r.db.Exec(query, tag.Serial, tag.Name)
+	query := `INSERT INTO tags (serial, name) VALUES (?, ?)`
+
+	err := conn.Exec(query, tag.Serial, tag.Name).Error
 	if err != nil {
 		return fmt.Errorf("error repo insert tag: %v", err.Error())
+	}
+
+	return nil
+}
+
+func (r *tagRepository) InsertTagStat(tagSerial string, tx *gorm.DB) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+
+	query := `INSERT INTO tag_stats(tag_serial) VALUES(?)`
+
+	err := conn.Exec(query, tagSerial).Error
+	if err != nil {
+		return fmt.Errorf("error repo insert tag stats: %v", err.Error())
 	}
 
 	return nil
@@ -71,4 +93,40 @@ func (r *tagRepository) GetTagBySerial(serial string) (*entity.TagDetail, error)
 	}
 
 	return tagDetail, nil
+}
+
+func (r *tagRepository) DecrementUsageCount(tagSerials []string, tx *gorm.DB) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+	
+	query := `UPDATE tag_stats 
+		SET usage_count = GREATEST(usage_count-1, 0), updated_at = NOW() 
+		WHERE tag_serial IN ?`
+
+	err := conn.Exec(query, tagSerials).Error
+	if err != nil {
+		return fmt.Errorf("error decrement tag usage count: %s", err.Error())
+	}
+
+	return nil
+}
+
+func (r *tagRepository) IncrementUsageCount(tagSerials []string, tx *gorm.DB) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+	
+	query := `UPDATE tag_stats 
+		SET usage_count = usage_count+1, updated_at = NOW()
+		WHERE tag_serial IN ?`
+
+	err := conn.Exec(query, tagSerials).Error
+	if err != nil {
+		return fmt.Errorf("error increment tag usage count: %s", err.Error())
+	}
+
+	return nil
 }

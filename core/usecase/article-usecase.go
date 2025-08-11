@@ -14,6 +14,8 @@ import (
 
 type articleUsecase struct {
 	articleRepo repository.ArticleRepositoryInterface
+	tagRepo repository.TagRepositoryInterface
+	transactionPkg        transactionutil.Transaction
 }
 
 type ArticleUsecaseInterface interface {
@@ -27,8 +29,8 @@ type ArticleUsecaseInterface interface {
 	GetVersionBySerial(serial string) (*entity.Version, error)
 }
 
-func NewArticleUsecase(articleRepo repository.ArticleRepositoryInterface) ArticleUsecaseInterface {
-	return &articleUsecase{articleRepo}
+func NewArticleUsecase(articleRepo repository.ArticleRepositoryInterface, tagRepo repository.TagRepositoryInterface, transactionPkg        transactionutil.Transaction) ArticleUsecaseInterface {
+	return &articleUsecase{articleRepo, tagRepo, transactionPkg}
 }
 
 const (
@@ -102,11 +104,90 @@ func (u *articleUsecase) CreateArticle(ctx *gin.Context, req *entity.CreateArtic
 }
 
 func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVersionStatusRequest) error {
-	if err := req.Validate(); err != nil {
+	err := req.Validate()
+	if err != nil {
 		return err
 	}
 
-	return u.articleRepo.UpdateArticleVersionStatus(req)
+	var currPublishedVersion *entity.Version
+	if isPublishedStatus(req.NewStatus) {
+		publishedVersions, err := u.articleRepo.GetVersionsByQuery(&entity.GetVersionsByQueryRequest{
+			ArticleSerial: req.ArticleSerial,
+			Status: entity.VersionStatusPublished.String(),
+		})
+		if err != nil {
+			return fmt.Errorf("error get published version: %s", err.Error())
+		}
+		if len(publishedVersions) > 0 {
+			currPublishedVersion = publishedVersions[0]
+		}
+	}
+
+	// init transaction for updating status and tag's usage count
+	tx := u.transactionPkg.InitTransaction()
+	defer u.transactionPkg.SettleTransaction(tx, err)
+
+	// calculate tag usage count
+	version, err := u.articleRepo.GetVersionBySerial(req.VersionSerial)
+	if err != nil {
+		return fmt.Errorf("error update usage count: %s", err.Error())
+	}
+
+	currStatus := version.Status
+	newStatus := req.NewStatus
+
+	if currStatus == newStatus {
+		return nil
+	} else if isPublishedStatus(currStatus) == isPublishedStatus(newStatus) || !isPublishedStatus(currStatus) == !isPublishedStatus(newStatus) {
+		// published to published or non published to non published, then do nothing 
+		return nil
+	} else {
+		tagsSerials := version.TagSerials()
+
+		if !isPublishedStatus(currStatus) && isPublishedStatus(newStatus) { // publish
+			if currPublishedVersion != nil { // need handle previous published version
+				// update previous published version to draft
+				err = u.articleRepo.UpdateArticleVersionStatus(&entity.UpdateArticleVersionStatusRequest{
+					ArticleSerial: req.ArticleSerial,
+					VersionSerial: currPublishedVersion.Serial,
+					NewStatus: entity.VersionStatusDraft.String(),
+				}, tx)
+				if err != nil {
+					return err
+				}
+
+				// decrement tag usage count the previous pubslihed version
+				err = u.tagRepo.DecrementUsageCount(currPublishedVersion.TagSerials(), tx)
+				if err != nil {
+					return err
+				}
+			}
+			
+			// increment tag usage count for new published version
+			err = u.tagRepo.IncrementUsageCount(tagsSerials, tx)
+			if err != nil {
+				return err
+			}
+		} else if isPublishedStatus(currStatus) && !isPublishedStatus(newStatus) { // unpublish
+			// decrement tag usage count this version
+			err = u.tagRepo.DecrementUsageCount(tagsSerials, tx)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// update to new status
+	err = u.articleRepo.UpdateArticleVersionStatus(req, tx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isPublishedStatus(status string) bool {
+	return status == entity.VersionStatusPublished.String()
 }
 
 func (u *articleUsecase) GetArticles(ctx *gin.Context, req *entity.GetArticlesRequest) (*entity.GetArticlesResponse, error) {
@@ -229,6 +310,8 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 		return err
 	}
 
+	// TODO: calculate usage_count
+
 	err = u.articleRepo.DeleteVersionByArticleSerial(tx, articleSerial)
 	if err != nil {
 		return err
@@ -242,7 +325,9 @@ func (u *articleUsecase) GetVersionsByArticleSerial(articleSerial string) (*enti
 		return nil, errorutil.NewCustomError(errorutil.ErrBadRequest, errors.New("error get versions by article serial: article serial is mandatory"))
 	}
 
-	versions, err := u.articleRepo.GetVersionsByArticleSerial(articleSerial)
+	versions, err := u.articleRepo.GetVersionsByQuery(&entity.GetVersionsByQueryRequest{
+		ArticleSerial: articleSerial,
+	})
 	if err != nil {
 		return nil, err
 	}
