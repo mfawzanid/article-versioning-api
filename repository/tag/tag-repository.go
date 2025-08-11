@@ -41,7 +41,7 @@ func (r *tagRepository) InsertTagStat(tagSerial string, tx *gorm.DB) error {
 		conn = r.gormDB
 	}
 
-	query := `INSERT INTO tag_stats(tag_serial) VALUES(?)`
+	query := `INSERT INTO tag_stats(tag_serial, updated_at) VALUES(?, NOW())`
 
 	err := conn.Exec(query, tagSerial).Error
 	if err != nil {
@@ -95,12 +95,12 @@ func (r *tagRepository) GetTagBySerial(serial string) (*entity.TagDetail, error)
 	return tagDetail, nil
 }
 
-func (r *tagRepository) DecrementUsageCount(tagSerials []string, tx *gorm.DB) error {
+func (r *tagRepository) DecrementUsageCount(tx *gorm.DB, tagSerials []string) error {
 	conn := transactionutil.GetTransaction(tx)
 	if conn == nil {
 		conn = r.gormDB
 	}
-	
+
 	query := `UPDATE tag_stats 
 		SET usage_count = GREATEST(usage_count-1, 0), updated_at = NOW() 
 		WHERE tag_serial IN ?`
@@ -113,12 +113,12 @@ func (r *tagRepository) DecrementUsageCount(tagSerials []string, tx *gorm.DB) er
 	return nil
 }
 
-func (r *tagRepository) IncrementUsageCount(tagSerials []string, tx *gorm.DB) error {
+func (r *tagRepository) IncrementUsageCount(tx *gorm.DB, tagSerials []string) error {
 	conn := transactionutil.GetTransaction(tx)
 	if conn == nil {
 		conn = r.gormDB
 	}
-	
+
 	query := `UPDATE tag_stats 
 		SET usage_count = usage_count+1, updated_at = NOW()
 		WHERE tag_serial IN ?`
@@ -126,6 +126,39 @@ func (r *tagRepository) IncrementUsageCount(tagSerials []string, tx *gorm.DB) er
 	err := conn.Exec(query, tagSerials).Error
 	if err != nil {
 		return fmt.Errorf("error increment tag usage count: %s", err.Error())
+	}
+
+	return nil
+}
+
+func (r *tagRepository) GetTagStatsBySerials(tx *gorm.DB, serials []string) ([]*entity.TagStat, error) {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+
+	tagStats := []*entity.TagStat{}
+
+	err := conn.Table("tag_stats").
+		Where("tag_serial IN ?", serials).Scan(&tagStats).Error
+	if err != nil {
+		return nil, fmt.Errorf("error repo get tag stats by serials: %s", err.Error())
+	}
+
+	return tagStats, nil
+}
+
+func (r *tagRepository) UpdateTagStat(tx *gorm.DB, tagSerial string, trendingScore float32) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+
+	query := `UPDATE tag_stats SET trending_score = ?, updated_at = NOW() WHERE tag_serial = ?`
+
+	err := conn.Exec(query, trendingScore, tagSerial).Error
+	if err != nil {
+		return fmt.Errorf("error repo update tag stat: %v", err.Error())
 	}
 
 	return nil

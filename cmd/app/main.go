@@ -47,8 +47,8 @@ func main() {
 
 	authUsecase := usecase.NewAuthUsecase()
 	userUsecase := usecase.NewUserUsecase(userRepo, authUsecase)
-	articleUsecase := usecase.NewArticleUsecase(articleRepo, tagRepo, transactionPkg)
-	tagUsecase := usecase.NewTagUsecase(tagRepo, transactionPkg)
+	articleUsecase := usecase.NewArticleUsecase(articleRepo, tagRepo, transactionPkg, cfg)
+	tagUsecase := usecase.NewTagUsecase(tagRepo, transactionPkg, cfg)
 
 	userHandler := handler.NewUserHandler(userUsecase)
 	authHandler := handler.NewAuthHandler(authUsecase)
@@ -65,7 +65,7 @@ func main() {
 
 	adminWriterRoute := router.Group("/")
 	adminWriterRoute.Use(authHandler.VerifyToken)
-	adminWriterRoute.Use(authHandler.VerifyRole([]string{"admin","writer"}))
+	adminWriterRoute.Use(authHandler.VerifyRole([]string{"admin", "writer"}))
 	{
 		adminWriterRoute.PATCH("articles/:serial/versions/:versionSerial/status", articleHandler.UpdateArticleVersionStatus)
 		adminWriterRoute.DELETE("articles/:serial", articleHandler.DeleteArticle)

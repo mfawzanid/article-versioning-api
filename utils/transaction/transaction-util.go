@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// TODO: remove
 func SettleTransaction(tx *sql.Tx, err error) error {
 	if tx == nil {
 		return nil
@@ -27,7 +28,6 @@ func SettleTransaction(tx *sql.Tx, err error) error {
 
 	return nil
 }
-
 
 var (
 	ErrRollback = errors.New("error db: rollback error")

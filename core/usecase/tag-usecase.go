@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"article-versioning-api/config"
 	"article-versioning-api/core/entity"
 	"article-versioning-api/core/repository"
 	errorutil "article-versioning-api/utils/error"
@@ -11,8 +12,9 @@ import (
 )
 
 type tagUsecase struct {
-	tagRepo repository.TagRepositoryInterface
-	transactionPkg        transactionutil.Transaction
+	tagRepo        repository.TagRepositoryInterface
+	transactionPkg transactionutil.Transaction
+	cfg            *config.Config
 }
 
 type TagUsecaseInterface interface {
@@ -21,8 +23,8 @@ type TagUsecaseInterface interface {
 	GetTagBySerial(serial string) (*entity.TagDetail, error)
 }
 
-func NewTagUsecase(tagRepo repository.TagRepositoryInterface, transactionPkg transactionutil.Transaction) TagUsecaseInterface {
-	return &tagUsecase{tagRepo, transactionPkg}
+func NewTagUsecase(tagRepo repository.TagRepositoryInterface, transactionPkg transactionutil.Transaction, cfg *config.Config) TagUsecaseInterface {
+	return &tagUsecase{tagRepo, transactionPkg, cfg}
 }
 
 const (

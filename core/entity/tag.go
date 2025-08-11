@@ -2,6 +2,7 @@ package entity
 
 import (
 	errorutil "article-versioning-api/utils/error"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -33,4 +34,11 @@ type TagDetail struct {
 	Name          string  `json:"name"`
 	UsageCount    int     `json:"usageCount"`
 	TrendingScore float32 `json:"trendingScore"`
+}
+
+type TagStat struct {
+	TagSerial     string
+	UsageCount    float32
+	TrendingScore float32
+	UpdatedAt     time.Time
 }

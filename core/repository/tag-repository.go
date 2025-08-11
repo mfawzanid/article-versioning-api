@@ -12,6 +12,8 @@ type TagRepositoryInterface interface {
 	GetTagBySerial(serial string) (*entity.TagDetail, error)
 
 	InsertTagStat(tagSerial string, tx *gorm.DB) error
-	DecrementUsageCount(tagSerials []string, tx *gorm.DB) error 
-	IncrementUsageCount(tagSerials []string, tx *gorm.DB) error 
+	DecrementUsageCount(tx *gorm.DB, tagSerials []string) error
+	IncrementUsageCount(tx *gorm.DB, tagSerials []string) error
+	GetTagStatsBySerials(tx *gorm.DB, serials []string) ([]*entity.TagStat, error)
+	UpdateTagStat(tx *gorm.DB, tagSerial string, trendingScore float32) error
 }

@@ -239,7 +239,7 @@ func (r *articleRepository) GetVersionsByQuery(req *entity.GetVersionsByQueryReq
 	dtoVersions := []*Version{}
 
 	db := r.gormDB.Table("versions")
-		
+
 	if req.ArticleSerial != "" {
 		db = db.Where("article_serial = ?", req.ArticleSerial)
 	}

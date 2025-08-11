@@ -1,21 +1,27 @@
 package usecase
 
 import (
+	"article-versioning-api/config"
 	"article-versioning-api/core/entity"
 	"article-versioning-api/core/repository"
 	errorutil "article-versioning-api/utils/error"
+	generalutil "article-versioning-api/utils/general"
 	serialutil "article-versioning-api/utils/serial"
 	transactionutil "article-versioning-api/utils/transaction"
 	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type articleUsecase struct {
-	articleRepo repository.ArticleRepositoryInterface
-	tagRepo repository.TagRepositoryInterface
-	transactionPkg        transactionutil.Transaction
+	articleRepo    repository.ArticleRepositoryInterface
+	tagRepo        repository.TagRepositoryInterface
+	transactionPkg transactionutil.Transaction
+	cfg            *config.Config
 }
 
 type ArticleUsecaseInterface interface {
@@ -29,8 +35,8 @@ type ArticleUsecaseInterface interface {
 	GetVersionBySerial(serial string) (*entity.Version, error)
 }
 
-func NewArticleUsecase(articleRepo repository.ArticleRepositoryInterface, tagRepo repository.TagRepositoryInterface, transactionPkg        transactionutil.Transaction) ArticleUsecaseInterface {
-	return &articleUsecase{articleRepo, tagRepo, transactionPkg}
+func NewArticleUsecase(articleRepo repository.ArticleRepositoryInterface, tagRepo repository.TagRepositoryInterface, transactionPkg transactionutil.Transaction, cfg *config.Config) ArticleUsecaseInterface {
+	return &articleUsecase{articleRepo, tagRepo, transactionPkg, cfg}
 }
 
 const (
@@ -103,17 +109,17 @@ func (u *articleUsecase) CreateArticle(ctx *gin.Context, req *entity.CreateArtic
 	return
 }
 
-func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVersionStatusRequest) error {
-	err := req.Validate()
+func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVersionStatusRequest) (err error) {
+	err = req.Validate()
 	if err != nil {
 		return err
 	}
 
 	var currPublishedVersion *entity.Version
-	if isPublishedStatus(req.NewStatus) {
+	if entity.IsPublishedStatus(req.NewStatus) {
 		publishedVersions, err := u.articleRepo.GetVersionsByQuery(&entity.GetVersionsByQueryRequest{
 			ArticleSerial: req.ArticleSerial,
-			Status: entity.VersionStatusPublished.String(),
+			Status:        entity.VersionStatusPublished.String(),
 		})
 		if err != nil {
 			return fmt.Errorf("error get published version: %s", err.Error())
@@ -125,56 +131,71 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 
 	// init transaction for updating status and tag's usage count
 	tx := u.transactionPkg.InitTransaction()
-	defer u.transactionPkg.SettleTransaction(tx, err)
+	defer func() {
+		u.transactionPkg.SettleTransaction(tx, err)
+	}()
 
 	// calculate tag usage count
 	version, err := u.articleRepo.GetVersionBySerial(req.VersionSerial)
 	if err != nil {
-		return fmt.Errorf("error update usage count: %s", err.Error())
+		return err
 	}
 
 	currStatus := version.Status
 	newStatus := req.NewStatus
 
+	allAffectedTagSerials := []string{}
+
 	if currStatus == newStatus {
 		return nil
-	} else if isPublishedStatus(currStatus) == isPublishedStatus(newStatus) || !isPublishedStatus(currStatus) == !isPublishedStatus(newStatus) {
-		// published to published or non published to non published, then do nothing 
+	} else if entity.IsPublishedStatus(currStatus) == entity.IsPublishedStatus(newStatus) || !entity.IsPublishedStatus(currStatus) == !entity.IsPublishedStatus(newStatus) {
+		// published to published or non published to non published, then do nothing
 		return nil
 	} else {
 		tagsSerials := version.TagSerials()
 
-		if !isPublishedStatus(currStatus) && isPublishedStatus(newStatus) { // publish
+		allAffectedTagSerials = append([]string{}, tagsSerials...)
+
+		if !entity.IsPublishedStatus(currStatus) && entity.IsPublishedStatus(newStatus) { // publish
 			if currPublishedVersion != nil { // need handle previous published version
 				// update previous published version to draft
 				err = u.articleRepo.UpdateArticleVersionStatus(tx, &entity.UpdateArticleVersionStatusRequest{
 					ArticleSerial: req.ArticleSerial,
 					VersionSerial: currPublishedVersion.Serial,
-					NewStatus: entity.VersionStatusDraft.String(),
+					NewStatus:     entity.VersionStatusDraft.String(),
 				})
 				if err != nil {
 					return err
 				}
 
 				// decrement tag usage count the previous pubslihed version
-				err = u.tagRepo.DecrementUsageCount(currPublishedVersion.TagSerials(), tx)
+				currPublishedVersionTagSerials := currPublishedVersion.TagSerials()
+				allAffectedTagSerials = append(allAffectedTagSerials, currPublishedVersionTagSerials...)
+
+				err = u.tagRepo.DecrementUsageCount(tx, currPublishedVersionTagSerials)
 				if err != nil {
 					return err
 				}
 			}
-			
+
 			// increment tag usage count for new published version
-			err = u.tagRepo.IncrementUsageCount(tagsSerials, tx)
+			err = u.tagRepo.IncrementUsageCount(tx, tagsSerials)
 			if err != nil {
 				return err
 			}
-		} else if isPublishedStatus(currStatus) && !isPublishedStatus(newStatus) { // unpublish
+		} else if entity.IsPublishedStatus(currStatus) && !entity.IsPublishedStatus(newStatus) { // unpublish
 			// decrement tag usage count this version
-			err = u.tagRepo.DecrementUsageCount(tagsSerials, tx)
+			err = u.tagRepo.DecrementUsageCount(tx, tagsSerials)
 			if err != nil {
 				return err
 			}
 		}
+	}
+
+	allAffectedTagSerials = generalutil.SanitizeDuplicateSerials(allAffectedTagSerials)
+	err = u.updateTrendingScore(tx, allAffectedTagSerials)
+	if err != nil {
+		return err
 	}
 
 	// update to new status
@@ -183,11 +204,7 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 		return err
 	}
 
-	return nil
-}
-
-func isPublishedStatus(status string) bool {
-	return status == entity.VersionStatusPublished.String()
+	return err
 }
 
 func (u *articleUsecase) GetArticles(ctx *gin.Context, req *entity.GetArticlesRequest) (*entity.GetArticlesResponse, error) {
@@ -299,7 +316,7 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 	var currPublishedVersion *entity.Version
 	publishedVersions, err := u.articleRepo.GetVersionsByQuery(&entity.GetVersionsByQueryRequest{
 		ArticleSerial: articleSerial,
-		Status: entity.VersionStatusPublished.String(),
+		Status:        entity.VersionStatusPublished.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("error get published version: %s", err.Error())
@@ -307,9 +324,11 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 	if len(publishedVersions) > 0 {
 		currPublishedVersion = publishedVersions[0]
 	}
-	
+
 	tx := u.transactionPkg.InitTransaction()
-	defer u.transactionPkg.SettleTransaction(tx, err)
+	defer func() {
+		u.transactionPkg.SettleTransaction(tx, err)
+	}()
 
 	err = u.articleRepo.DeleteArticle(tx, articleSerial)
 	if err != nil {
@@ -322,8 +341,14 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 	}
 
 	if currPublishedVersion != nil {
+		currPublishedVersionTagSerials := currPublishedVersion.TagSerials()
 		// decrement tag usage count the previous pubslihed version
-		err = u.tagRepo.DecrementUsageCount(currPublishedVersion.TagSerials(), tx)
+		err = u.tagRepo.DecrementUsageCount(tx, currPublishedVersionTagSerials)
+		if err != nil {
+			return err
+		}
+
+		err = u.updateTrendingScore(tx, currPublishedVersion.TagSerials())
 		if err != nil {
 			return err
 		}
@@ -355,4 +380,38 @@ func (u *articleUsecase) GetVersionBySerial(serial string) (*entity.Version, err
 	}
 
 	return u.articleRepo.GetVersionBySerial(serial)
+}
+
+func (u *articleUsecase) calculateTrendingScore(usageCount int, lastUpdatedAt time.Time) float32 {
+	if usageCount <= 0 {
+		return 0
+	}
+
+	// age in days
+	ageDays := time.Since(lastUpdatedAt).Hours() / 24
+
+	// decay rate from half-life
+	lambda := math.Ln2 / u.cfg.TrendingScoreHalLifeDays
+
+	// decay formula
+	recencyFactor := math.Exp(-float64(lambda) * ageDays)
+
+	return float32(usageCount) * float32(recencyFactor)
+}
+
+func (u *articleUsecase) updateTrendingScore(tx *gorm.DB, tagSerials []string) error {
+	tagStats, err := u.tagRepo.GetTagStatsBySerials(tx, tagSerials)
+	if err != nil {
+		return err
+	}
+
+	for _, tagStat := range tagStats {
+		newTrendingScore := u.calculateTrendingScore(int(tagStat.UsageCount), tagStat.UpdatedAt)
+		err = u.tagRepo.UpdateTagStat(tx, tagStat.TagSerial, newTrendingScore)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

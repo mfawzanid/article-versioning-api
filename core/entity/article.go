@@ -74,6 +74,10 @@ func StringToVersionRole(vs string) VersionStatus {
 	return versionStatus
 }
 
+func IsPublishedStatus(status string) bool {
+	return status == VersionStatusPublished.String()
+}
+
 type Version struct {
 	Serial               string     `json:"serial"`
 	AuthorUsername       string     `json:"authorUsername"`
@@ -229,5 +233,5 @@ type GetTagsResponse struct {
 
 type GetVersionsByQueryRequest struct {
 	ArticleSerial string
-	Status 		  string
+	Status        string
 }
