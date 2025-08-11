@@ -21,4 +21,6 @@ type ArticleRepositoryInterface interface {
 	GetArticleLatestDetail(articleSerial string) ([]*entity.Version, error)
 	GetVersionsByQuery(req *entity.GetVersionsByQueryRequest) ([]*entity.Version, error)
 	GetVersionBySerial(serial string) (*entity.Version, error)
+	UpdateTagRelationshipScore(tx *gorm.DB, versionSerial string, tagRelationshipScore float32) error
+	GetTotalPublishedArticle(tx *gorm.DB) (int, error)
 }

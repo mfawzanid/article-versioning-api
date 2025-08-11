@@ -145,6 +145,7 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 	newStatus := req.NewStatus
 
 	allAffectedTagSerials := []string{}
+	tagsSerials := version.TagSerials()
 
 	if currStatus == newStatus {
 		return nil
@@ -152,7 +153,6 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 		// published to published or non published to non published, then do nothing
 		return nil
 	} else {
-		tagsSerials := version.TagSerials()
 
 		allAffectedTagSerials = append([]string{}, tagsSerials...)
 
@@ -200,6 +200,21 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 
 	// update to new status
 	err = u.articleRepo.UpdateArticleVersionStatus(tx, req)
+	if err != nil {
+		return err
+	}
+
+	tagSerialPairCombination := generatePairCombination(tagsSerials)
+	for _, pair := range tagSerialPairCombination {
+		if len(pair) >= 2 {
+			err = u.tagRepo.IncrementTagPairStat(tx, pair[0], pair[1])
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err = u.updateTagRelationshipScore(tx, version.Serial, tagsSerials)
 	if err != nil {
 		return err
 	}
@@ -414,4 +429,109 @@ func (u *articleUsecase) updateTrendingScore(tx *gorm.DB, tagSerials []string) e
 	}
 
 	return nil
+}
+
+func generatePairCombination(serials []string) [][]string {
+	var pairs [][]string
+	n := len(serials)
+
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
+			// ensure the sequence, this used in tag_pair_stats
+			serial1 := serials[i]
+			serial2 := serials[j]
+			if serial1 > serial2 {
+				serial1, serial2 = serial2, serial1
+			}
+
+			pairs = append(pairs, []string{serial1, serial2})
+		}
+	}
+
+	return pairs
+}
+
+func calculateTagRelationshipScore(tag1UsageCount, tag2UsageCount, pairUsageCount, totalPublishedArticle int) float32 {
+	// avoid divide by zero or invalid log
+	if tag1UsageCount == 0 || tag2UsageCount == 0 || pairUsageCount == 0 || totalPublishedArticle == 0 {
+		return 0
+	}
+
+	// PMI = log2( (C(i,j) * N) / (C(i) * C(j)) )
+	pmi := math.Log2(float64(pairUsageCount) * float64(totalPublishedArticle) /
+		(float64(tag1UsageCount) * float64(tag2UsageCount)))
+
+	// PMI+ = max(PMI, 0)
+	if pmi < 0 {
+		return 0
+	}
+
+	return float32(pmi)
+}
+
+func (u *articleUsecase) getAllTagUsageCount(tx *gorm.DB, tagSerials []string) (map[string]int, map[string]int, error) {
+	mapTagUsageCount := make(map[string]int)
+	tagStats, err := u.tagRepo.GetTagStatsBySerials(tx, tagSerials)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, ts := range tagStats {
+		mapTagUsageCount[ts.TagSerial] = int(ts.UsageCount)
+	}
+
+	mapTagPairUsageCount := make(map[string]int)
+	tagPairStats, err := u.tagRepo.GetTagPairStatsBySerials(tx, tagSerials)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, tps := range tagPairStats {
+		mapTagPairUsageCount[fmt.Sprint(tps.Tag1Serial, "-", tps.Tag2Serial)] = int(tps.UsageCount)
+	}
+
+	return mapTagUsageCount, mapTagPairUsageCount, nil
+}
+
+func (u *articleUsecase) updateTagRelationshipScore(tx *gorm.DB, versionSerial string, tagSerials []string) error {
+	if len(tagSerials) < 1 {
+		return u.articleRepo.UpdateTagRelationshipScore(tx, versionSerial, 0)
+	}
+
+	totalPublishedVersion, err := u.articleRepo.GetTotalPublishedArticle(tx)
+	if err != nil {
+		return err
+	}
+
+	mapTagUsageCount, mapTagPairUsageCount, err := u.getAllTagUsageCount(tx, tagSerials)
+	if err != nil {
+		return err
+	}
+
+	tagSerialPairCombination := generatePairCombination(tagSerials)
+	var totalScore float32
+	for _, pair := range tagSerialPairCombination {
+		tag1UsageCount, ok := mapTagUsageCount[pair[0]]
+		if !ok {
+			err = fmt.Errorf("error update tag relationship score: usage count tag '%s' is not found", pair[0])
+			return err
+		}
+		tag2UsageCount, ok := mapTagUsageCount[pair[1]]
+		if !ok {
+			err = fmt.Errorf("error update tag relationship score: usage count tag '%s' is not found", pair[0])
+			return err
+		}
+		tagPairSerial := fmt.Sprint(pair[0], "-", pair[1])
+		tagPairUsageCount, ok := mapTagPairUsageCount[tagPairSerial]
+		if !ok {
+			err = fmt.Errorf("error update tag relationship score: usage count tag pair '%s' is not found", tagPairSerial)
+			return err
+		}
+
+		score := calculateTagRelationshipScore(tag1UsageCount, tag2UsageCount, tagPairUsageCount, totalPublishedVersion)
+
+		totalScore += score
+	}
+
+	finalScore := float32(totalScore) / float32(len(tagSerialPairCombination))
+
+	return u.articleRepo.UpdateTagRelationshipScore(tx, versionSerial, finalScore)
 }

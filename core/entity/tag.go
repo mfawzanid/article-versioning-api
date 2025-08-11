@@ -42,3 +42,9 @@ type TagStat struct {
 	TrendingScore float32
 	UpdatedAt     time.Time
 }
+
+type TagPairStat struct {
+	Tag1Serial string
+	Tag2Serial string
+	UsageCount int
+}

@@ -55,3 +55,11 @@ CREATE TABLE tag_stats (
     trending_score FLOAT DEFAULT 0,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE tag_pair_stats (
+    tag1_serial VARCHAR(25) NOT NULL REFERENCES tags(serial),
+    tag2_serial VARCHAR(25) NOT NULL REFERENCES tags(serial),
+    usage_count INT DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (tag1_serial, tag2_serial)
+);

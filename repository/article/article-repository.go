@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -85,10 +84,11 @@ func (r *articleRepository) UpdateArticleVersionStatus(tx *gorm.DB, req *entity.
 		conn = r.gormDB
 	}
 
-	query := `UPDATE versions SET status = ?, updated_at = ?, published_at = ? WHERE serial = ? AND article_serial = ?`
+	// TODO: set published_at if status = published
+	// and also remove for unpublishing
+	query := `UPDATE versions SET status = ?, updated_at = NOW() WHERE serial = ? AND article_serial = ?`
 
-	timeNow := time.Now()
-	err := conn.Exec(query, req.NewStatus, timeNow, timeNow, req.VersionSerial, req.ArticleSerial).Error
+	err := conn.Exec(query, req.NewStatus, req.VersionSerial, req.ArticleSerial).Error
 	if err != nil {
 		return fmt.Errorf("error repo update article version status: %v", err.Error())
 	}
@@ -351,4 +351,38 @@ func (r *articleRepository) parseDTOToVersions(dtoVersions []*Version) ([]*entit
 	}
 
 	return versions, nil
+}
+
+func (r *articleRepository) UpdateTagRelationshipScore(tx *gorm.DB, versionSerial string, tagRelationshipScore float32) error {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+
+	query := `UPDATE versions SET tag_relationship_score = ?, updated_at = NOW() WHERE serial = ?`
+
+	err := conn.Exec(query, tagRelationshipScore, versionSerial).Error
+	if err != nil {
+		return fmt.Errorf("error repo update article version status: %v", err.Error())
+	}
+
+	return nil
+}
+
+func (r *articleRepository) GetTotalPublishedArticle(tx *gorm.DB) (int, error) {
+	conn := transactionutil.GetTransaction(tx)
+	if conn == nil {
+		conn = r.gormDB
+	}
+
+	var total int64
+	err := conn.Table("versions").
+		Where("status = ?", entity.VersionStatusPublished.String()).
+		Distinct("article_serial").
+		Count(&total).Error
+	if err != nil {
+		return 0, fmt.Errorf("error repo get total pubslished article: %s", err.Error())
+	}
+
+	return int(total), nil
 }
