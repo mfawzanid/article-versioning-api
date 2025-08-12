@@ -68,11 +68,9 @@ func (u *articleUsecase) CreateArticle(ctx *gin.Context, req *entity.CreateArtic
 		return nil, fmt.Errorf("error create article: error generate serial: %s", err.Error())
 	}
 
-	article := &entity.Article{
+	err = u.articleRepo.InsertArticleTx(tx, &entity.Article{
 		Serial: articleSerial,
-	}
-
-	err = u.articleRepo.InsertArticleTx(tx, article)
+	})
 	if err != nil {
 		return
 	}
@@ -81,6 +79,7 @@ func (u *articleUsecase) CreateArticle(ctx *gin.Context, req *entity.CreateArtic
 	if err != nil {
 		return nil, fmt.Errorf("error create article: error generate version serial: %s", err.Error())
 	}
+
 	version := &entity.Version{
 		Serial:         versionSerial,
 		AuthorUsername: authorUsername,
@@ -150,51 +149,50 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 
 	if currStatus == newStatus {
 		return nil
-	} else if entity.IsPublishedStatus(currStatus) == entity.IsPublishedStatus(newStatus) || !entity.IsPublishedStatus(currStatus) == !entity.IsPublishedStatus(newStatus) {
+	}
+	if entity.IsPublishedStatus(currStatus) == entity.IsPublishedStatus(newStatus) || !entity.IsPublishedStatus(currStatus) == !entity.IsPublishedStatus(newStatus) {
 		// published to published or non published to non published, then do nothing
 		return nil
-	} else {
+	}
 
-		allAffectedTagSerials = append([]string{}, tagsSerials...)
+	allAffectedTagSerials = append([]string{}, tagsSerials...)
 
-		if !entity.IsPublishedStatus(currStatus) && entity.IsPublishedStatus(newStatus) { // publish
-			if currPublishedVersion != nil { // need handle previous published version
-				// update previous published version to draft
-				err = u.articleRepo.UpdateArticleVersionStatus(tx, &entity.UpdateArticleVersionStatusRequest{
-					ArticleSerial: req.ArticleSerial,
-					VersionSerial: currPublishedVersion.Serial,
-					NewStatus:     entity.VersionStatusDraft.String(),
-				})
-				if err != nil {
-					return err
-				}
-
-				// decrement tag usage count the previous pubslihed version
-				currPublishedVersionTagSerials := currPublishedVersion.TagSerials()
-				allAffectedTagSerials = append(allAffectedTagSerials, currPublishedVersionTagSerials...)
-
-				err = u.tagRepo.DecrementUsageCount(tx, currPublishedVersionTagSerials)
-				if err != nil {
-					return err
-				}
-			}
-
-			// increment tag usage count for new published version
-			err = u.tagRepo.IncrementUsageCount(tx, tagsSerials)
+	if !entity.IsPublishedStatus(currStatus) && entity.IsPublishedStatus(newStatus) { // publish
+		if currPublishedVersion != nil { // need handle previous published version
+			// update previous published version to draft
+			err = u.articleRepo.UpdateArticleVersionStatus(tx, &entity.UpdateArticleVersionStatusRequest{
+				ArticleSerial: req.ArticleSerial,
+				VersionSerial: currPublishedVersion.Serial,
+				NewStatus:     entity.VersionStatusDraft.String(),
+			})
 			if err != nil {
 				return err
 			}
-		} else if entity.IsPublishedStatus(currStatus) && !entity.IsPublishedStatus(newStatus) { // unpublish
-			// decrement tag usage count this version
-			err = u.tagRepo.DecrementUsageCount(tx, tagsSerials)
+
+			// decrement tag usage count the previous pubslihed version
+			currPublishedVersionTagSerials := currPublishedVersion.TagSerials()
+			allAffectedTagSerials = append(allAffectedTagSerials, currPublishedVersionTagSerials...)
+
+			err = u.tagRepo.DecrementUsageCount(tx, currPublishedVersionTagSerials)
 			if err != nil {
 				return err
 			}
 		}
+
+		// increment tag usage count for new published version
+		err = u.tagRepo.IncrementUsageCount(tx, tagsSerials)
+		if err != nil {
+			return err
+		}
+	} else if entity.IsPublishedStatus(currStatus) && !entity.IsPublishedStatus(newStatus) { // unpublish
+		// decrement tag usage count this version
+		err = u.tagRepo.DecrementUsageCount(tx, tagsSerials)
+		if err != nil {
+			return err
+		}
 	}
 
 	allAffectedTagSerials = generalutil.SanitizeDuplicateSerials(allAffectedTagSerials)
-
 	allTagStats, err := u.tagRepo.GetTagStatsBySerials(tx, allAffectedTagSerials)
 	if err != nil {
 		return err
@@ -211,6 +209,8 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 		return err
 	}
 
+	// update tag relationship score
+	// generate pair and record the increment
 	tagSerialPairCombination := generatePairCombination(tagsSerials)
 	for _, pair := range tagSerialPairCombination {
 		if len(pair) >= 2 {
@@ -220,7 +220,7 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 			}
 		}
 	}
-
+	// calculate tag relationship score based on tag usage count and its pair that increase and or decrease before
 	err = u.updateTagRelationshipScore(tx, version.Serial, tagsSerials)
 	if err != nil {
 		return err
@@ -234,7 +234,10 @@ func (u *articleUsecase) GetArticles(ctx *gin.Context, req *entity.GetArticlesRe
 		return nil, err
 	}
 
-	req.Status = entity.VersionStatusPublished.String()
+	userRole := entity.GetContextRole(ctx)
+	if userRole == entity.UserRoleReader.String() {
+		req.Status = entity.VersionStatusPublished.String()
+	}
 
 	resp, err := u.articleRepo.GetArticles(req)
 	if err != nil {
@@ -341,7 +344,7 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 		Status:        entity.VersionStatusPublished.String(),
 	})
 	if err != nil {
-		return fmt.Errorf("error get published version: %s", err.Error())
+		return fmt.Errorf("error delete article: %s", err.Error())
 	}
 	if len(publishedVersions) > 0 {
 		currPublishedVersion = publishedVersions[0]
@@ -370,6 +373,7 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 			return err
 		}
 
+		// update the trending score
 		tagStats, err := u.tagRepo.GetTagStatsBySerials(tx, currPublishedVersion.TagSerials())
 		if err != nil {
 			return err
@@ -409,6 +413,7 @@ func (u *articleUsecase) GetVersionBySerial(serial string) (*entity.Version, err
 	return u.articleRepo.GetVersionBySerial(serial)
 }
 
+// calculate the trending score using exponential decay with half-life set in config as TrendingScoreHalLifeDays
 func (u *articleUsecase) calculateTrendingScore(usageCount int, lastUpdatedAt time.Time) float32 {
 	if usageCount <= 0 {
 		return 0
@@ -458,6 +463,7 @@ func generatePairCombination(serials []string) [][]string {
 	return pairs
 }
 
+// calculate tag relationship score using Positive Pointwise Mutual Information (PMI)
 func calculateTagRelationshipScore(tag1UsageCount, tag2UsageCount, pairUsageCount, totalPublishedArticle int) float32 {
 	// avoid divide by zero or invalid log
 	if tag1UsageCount == 0 || tag2UsageCount == 0 || pairUsageCount == 0 || totalPublishedArticle == 0 {
@@ -499,7 +505,7 @@ func (u *articleUsecase) getAllTagUsageCount(tx *gorm.DB, tagSerials []string) (
 }
 
 func (u *articleUsecase) updateTagRelationshipScore(tx *gorm.DB, versionSerial string, tagSerials []string) error {
-	if len(tagSerials) < 1 {
+	if len(tagSerials) < 2 {
 		return u.articleRepo.UpdateTagRelationshipScore(tx, versionSerial, 0)
 	}
 
@@ -543,6 +549,7 @@ func (u *articleUsecase) updateTagRelationshipScore(tx *gorm.DB, versionSerial s
 	return u.articleRepo.UpdateTagRelationshipScore(tx, versionSerial, finalScore)
 }
 
+// update trending score for all tags that triggered by worker
 func (u *articleUsecase) UpdateTrendingScoreTags(pg *entity.Pagination) (err error) {
 	pg.SetToDefault()
 

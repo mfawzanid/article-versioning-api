@@ -4,7 +4,6 @@ import (
 	"article-versioning-api/core/entity"
 	"article-versioning-api/core/usecase"
 	errorutil "article-versioning-api/utils/error"
-	generalutil "article-versioning-api/utils/general"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -29,20 +28,8 @@ func (h *tagHandler) CreateTag(c *gin.Context) {
 
 	serial, err := h.tagUsecase.CreateTag(req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -59,24 +46,12 @@ func (h *tagHandler) GetTags(c *gin.Context) {
 		return
 	}
 
-	req.Pagination = entity.ParseToPagination(req.Page, req.PageSize) // TODO: move to usecase?
+	req.Pagination = entity.ParseToPagination(req.Page, req.PageSize)
 
 	resp, err := h.tagUsecase.GetTags(req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -87,20 +62,8 @@ func (h *tagHandler) GetTagBySerial(c *gin.Context) {
 
 	resp, err := h.tagUsecase.GetTagBySerial(serial)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, resp)

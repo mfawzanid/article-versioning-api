@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang-jwt/jwt"
 
+	"article-versioning-api/config"
 	"article-versioning-api/core/entity"
 	errorutil "article-versioning-api/utils/error"
 )
@@ -17,15 +18,12 @@ type AuthUsecaseInterface interface {
 }
 
 type authUsecase struct {
+	cfg *config.Config
 }
 
-func NewAuthUsecase() AuthUsecaseInterface {
-	return &authUsecase{}
+func NewAuthUsecase(cfg *config.Config) AuthUsecaseInterface {
+	return &authUsecase{cfg}
 }
-
-const (
-	tokenSecret = "token_secret" // TODO: set in config
-)
 
 func (u *authUsecase) CreateToken(user *entity.User) (tokenString string, err error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -34,7 +32,7 @@ func (u *authUsecase) CreateToken(user *entity.User) (tokenString string, err er
 		"exp":                  time.Now().Add(time.Hour).Unix(),
 	})
 
-	tokenString, err = token.SignedString([]byte(tokenSecret))
+	tokenString, err = token.SignedString([]byte(u.cfg.TokenSecret))
 	if err != nil {
 		return "", fmt.Errorf("error create token: %v", err.Error())
 	}
@@ -44,7 +42,7 @@ func (u *authUsecase) CreateToken(user *entity.User) (tokenString string, err er
 
 func (u *authUsecase) VerifyToken(tokenString string) (*entity.User, error) {
 	token, err := jwt.Parse(tokenString, func(tokenString *jwt.Token) (interface{}, error) {
-		return []byte(tokenSecret), nil
+		return []byte(u.cfg.TokenSecret), nil
 	})
 	if err != nil {
 		return nil, errorutil.NewCustomError(errorutil.ErrUnauthorized, fmt.Errorf("error verify token: %v", err.Error()))

@@ -20,7 +20,7 @@ const (
 type CreateArticleRequest struct {
 	Title      string
 	Content    string
-	TagSerials []string // TODO: Meskipun tag juga bisa dibuat secara implisit saat membuat/memperbarui artikel
+	TagSerials []string
 }
 
 func (r *CreateArticleRequest) Validate() error {

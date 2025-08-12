@@ -12,6 +12,7 @@ import (
 
 type AuthHandler interface {
 	VerifyToken(ctx *gin.Context)
+	VerifyNotMandatoryToken(ctx *gin.Context)
 	VerifyRole(authorizedRoles []string) gin.HandlerFunc
 }
 
@@ -33,6 +34,21 @@ func (h *authHandler) VerifyToken(ctx *gin.Context) {
 		return
 	}
 
+	h.verifyAndSetContext(ctx, authToken)
+}
+
+func (h *authHandler) VerifyNotMandatoryToken(ctx *gin.Context) {
+	authToken := ctx.Request.Header["Authorization"]
+	if len(authToken) == 0 {
+		ctx.Set(entity.ContextRole, entity.UserRoleReader.String())
+		ctx.Next()
+		return
+	}
+
+	h.verifyAndSetContext(ctx, authToken)
+}
+
+func (h *authHandler) verifyAndSetContext(ctx *gin.Context, authToken []string) {
 	user, err := h.authUsecase.VerifyToken(authToken[0])
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{
@@ -49,7 +65,7 @@ func (h *authHandler) VerifyToken(ctx *gin.Context) {
 }
 
 func (h *authHandler) VerifyRole(authorizedRoles []string) gin.HandlerFunc {
-	return func(ctx *gin.Context){
+	return func(ctx *gin.Context) {
 		userRole, _ := ctx.Get(entity.ContextRole)
 		for _, role := range authorizedRoles {
 			if role == userRole {

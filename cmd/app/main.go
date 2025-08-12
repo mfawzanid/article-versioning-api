@@ -33,7 +33,7 @@ func main() {
 	log.Printf("Connected to database: %v", dbDSN)
 	defer db.Close()
 
-	// TODO
+	// TODO: just use gorm
 	gormDB, err := gorm.Open(postgres.New(postgres.Config{Conn: db}), &gorm.Config{})
 	if err != nil {
 		panic(err)
@@ -45,7 +45,7 @@ func main() {
 	articleRepo := articlerepository.NewArticleRepository(db, cfg, gormDB)
 	tagRepo := tagrepository.NewTagRepository(db, gormDB)
 
-	authUsecase := usecase.NewAuthUsecase()
+	authUsecase := usecase.NewAuthUsecase(cfg)
 	userUsecase := usecase.NewUserUsecase(userRepo, authUsecase)
 	articleUsecase := usecase.NewArticleUsecase(articleRepo, tagRepo, transactionPkg, cfg)
 	tagUsecase := usecase.NewTagUsecase(tagRepo, transactionPkg, cfg)
@@ -65,7 +65,7 @@ func main() {
 
 	adminWriterRoute := router.Group("/")
 	adminWriterRoute.Use(authHandler.VerifyToken)
-	adminWriterRoute.Use(authHandler.VerifyRole([]string{"admin", "writer"}))
+	adminWriterRoute.Use(authHandler.VerifyRole([]string{"admin", "editor", "writer"}))
 	{
 		adminWriterRoute.PATCH("articles/:serial/versions/:versionSerial/status", articleHandler.UpdateArticleVersionStatus)
 		adminWriterRoute.DELETE("articles/:serial", articleHandler.DeleteArticle)
@@ -78,10 +78,10 @@ func main() {
 		adminWriterRoute.GET("/tags/:serial", tagHandler.GetTagBySerial)
 	}
 
-	authenticatedRoute := router.Group("/")
-	authenticatedRoute.Use(authHandler.VerifyToken)
+	NonAuthenticatedRoute := router.Group("/")
+	NonAuthenticatedRoute.Use(authHandler.VerifyNotMandatoryToken)
 	{
-		authenticatedRoute.GET("/articles", articleHandler.GetArticles)
+		NonAuthenticatedRoute.GET("/articles", articleHandler.GetArticles)
 	}
 
 	router.POST("/users/register", userHandler.RegisterUser)

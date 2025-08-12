@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// TODO: remove
+// TODO: remove after all use gorm
 func SettleTransaction(tx *sql.Tx, err error) error {
 	if tx == nil {
 		return nil

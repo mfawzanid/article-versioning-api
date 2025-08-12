@@ -84,11 +84,18 @@ func (r *articleRepository) UpdateArticleVersionStatus(tx *gorm.DB, req *entity.
 		conn = r.gormDB
 	}
 
-	// TODO: set published_at if status = published
-	// and also remove for unpublishing
-	query := `UPDATE versions SET status = ?, updated_at = NOW() WHERE serial = ? AND article_serial = ?`
+	isPublished := req.NewStatus == entity.VersionStatusPublished.String()
 
-	err := conn.Exec(query, req.NewStatus, req.VersionSerial, req.ArticleSerial).Error
+	query := `
+		UPDATE versions
+		SET
+			status = ?,
+			updated_at = NOW(),
+			published_at = CASE WHEN ? THEN NOW() ELSE NULL END
+		WHERE serial = ? AND article_serial = ?
+	`
+
+	err := conn.Exec(query, req.NewStatus, isPublished, req.VersionSerial, req.ArticleSerial).Error
 	if err != nil {
 		return fmt.Errorf("error repo update article version status: %v", err.Error())
 	}
@@ -154,7 +161,11 @@ func (r *articleRepository) GetArticles(req *entity.GetArticlesRequest) (*entity
 
 	db := r.gormDB.Table("versions v").
 		Joins("INNER JOIN articles a ON a.serial = v.article_serial").
-		Where("a.deleted_at IS NULL AND v.status = ?", req.Status)
+		Where("a.deleted_at IS NULL")
+
+	if req.Status != "" {
+		db = db.Where("v.status = ?", req.Status)
+	}
 
 	if req.AuthorUsername != "" {
 		db = db.Where("v.author_usename = ?", req.AuthorUsername)

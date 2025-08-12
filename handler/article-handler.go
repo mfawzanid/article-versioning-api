@@ -35,20 +35,8 @@ func (h *articleHandler) CreateArticle(c *gin.Context) {
 
 	resp, err := h.articleUsecase.CreateArticle(c, req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil { // TODO
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusCreated, resp)
@@ -63,24 +51,12 @@ func (h *articleHandler) GetArticles(c *gin.Context) {
 		return
 	}
 
-	req.Pagination = entity.ParseToPagination(req.Page, req.PageSize) // TODO: move to usecase?
+	req.Pagination = entity.ParseToPagination(req.Page, req.PageSize)
 
 	resp, err := h.articleUsecase.GetArticles(c, req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -91,20 +67,8 @@ func (h *articleHandler) GetArticleLatestDetail(c *gin.Context) {
 
 	resp, err := h.articleUsecase.GetArticleLatestDetail(articleSerial)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -124,20 +88,8 @@ func (h *articleHandler) CreateArticleVersion(c *gin.Context) {
 
 	resp, err := h.articleUsecase.CreateArticleVersion(c, req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusCreated, resp)
@@ -148,20 +100,8 @@ func (h *articleHandler) DeleteArticle(c *gin.Context) {
 
 	err := h.articleUsecase.DeleteArticle(articleSerial)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -186,20 +126,8 @@ func (h *articleHandler) UpdateArticleVersionStatus(c *gin.Context) {
 
 	err := h.articleUsecase.UpdateArticleVersionStatus(req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -212,20 +140,8 @@ func (h *articleHandler) GetVersionsByArticleSerial(c *gin.Context) {
 
 	resp, err := h.articleUsecase.GetVersionsByArticleSerial(articleSerial)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -236,20 +152,8 @@ func (h *articleHandler) GetVersionBySerial(c *gin.Context) {
 
 	resp, err := h.articleUsecase.GetVersionBySerial(versionSerial)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -276,6 +180,6 @@ func (h *articleHandler) UpdateTrendingScoreTags(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		message: "tag trending score is updated",
+		message: "tags trending score is updated",
 	})
 }

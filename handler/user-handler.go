@@ -31,20 +31,8 @@ func (h *userHandler) RegisterUser(c *gin.Context) {
 
 	err := h.userUsecase.RegisterUser(req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -64,23 +52,24 @@ func (h *userHandler) Login(c *gin.Context) {
 
 	token, err := h.userUsecase.Login(req)
 	if err != nil {
-		switch errorutil.GetErrorType(err) {
-		case errorutil.ErrBadRequest:
-			c.JSON(http.StatusBadRequest, generalutil.MapAny{
-				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
-			})
-			return
-		default:
-			if c != nil {
-				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
-					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
-				})
-				return
-			}
-		}
+		writeHTTPError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 	})
+}
+
+func writeHTTPError(c *gin.Context, err error) {
+	switch errorutil.GetErrorType(err) {
+	case errorutil.ErrBadRequest:
+		c.AbortWithStatusJSON(http.StatusBadRequest, generalutil.MapAny{
+			errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
+		})
+	default:
+		c.AbortWithStatusJSON(http.StatusInternalServerError, generalutil.MapAny{
+			errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
+		})
+	}
 }
