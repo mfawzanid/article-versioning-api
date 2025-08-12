@@ -569,11 +569,10 @@ func (u *articleUsecase) UpdateTrendingScoreTags(pg *entity.Pagination) (err err
 			return err
 		}
 
-		if pg.Page == pg.TotalPage {
+		pg.Page++
+		if pg.Page > pg.TotalPage {
 			break
 		}
-
-		pg.Page++
 	}
 
 	return nil

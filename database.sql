@@ -40,7 +40,8 @@ CREATE TABLE tags (
     serial VARCHAR(25) NOT NULL,
     name TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(serial)
+    UNIQUE(serial),
+    UNIQUE(name)
 );
 
 CREATE TABLE version_tags (

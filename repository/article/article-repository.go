@@ -168,7 +168,7 @@ func (r *articleRepository) GetArticles(req *entity.GetArticlesRequest) (*entity
 	}
 
 	if req.AuthorUsername != "" {
-		db = db.Where("v.author_usename = ?", req.AuthorUsername)
+		db = db.Where("v.author_username = ?", req.AuthorUsername)
 	}
 	if req.TagSerial != "" {
 		db = db.Joins("INNER JOIN version_tags vt ON vt.version_serial = v.serial").

@@ -22,7 +22,8 @@ It supports JWT authentication and enforces user roles to determine which APIs a
     Each article has a **Tag Relationship Score**, which is computed using **Positive PMI** to measure how closely tags are related.
 
 ### Database Schema
-[View Database Schema](./DATABASE.md)
+[View Database Schema Detail](./DATABASE.md)
+[View Database Schema Image](./db_schema.png)
 
 ## API Endpoints
 
