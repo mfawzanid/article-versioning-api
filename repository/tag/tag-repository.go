@@ -41,7 +41,7 @@ func (r *tagRepository) InsertTagStat(tagSerial string, tx *gorm.DB) error {
 		conn = r.gormDB
 	}
 
-	query := `INSERT INTO tag_stats(tag_serial, updated_at) VALUES(?, NOW())`
+	query := `INSERT INTO tag_stats(tag_serial, usage_count_updated_at) VALUES(?, NOW())`
 
 	err := conn.Exec(query, tagSerial).Error
 	if err != nil {
@@ -102,7 +102,7 @@ func (r *tagRepository) DecrementUsageCount(tx *gorm.DB, tagSerials []string) er
 	}
 
 	query := `UPDATE tag_stats 
-		SET usage_count = GREATEST(usage_count-1, 0), updated_at = NOW() 
+		SET usage_count = GREATEST(usage_count-1, 0), usage_count_updated_at = NOW() 
 		WHERE tag_serial IN ?`
 
 	err := conn.Exec(query, tagSerials).Error
@@ -120,7 +120,7 @@ func (r *tagRepository) IncrementUsageCount(tx *gorm.DB, tagSerials []string) er
 	}
 
 	query := `UPDATE tag_stats 
-		SET usage_count = usage_count+1, updated_at = NOW()
+		SET usage_count = usage_count+1, usage_count_updated_at = NOW()
 		WHERE tag_serial IN ?`
 
 	err := conn.Exec(query, tagSerials).Error
@@ -154,7 +154,7 @@ func (r *tagRepository) UpdateTagStat(tx *gorm.DB, tagSerial string, trendingSco
 		conn = r.gormDB
 	}
 
-	query := `UPDATE tag_stats SET trending_score = ?, updated_at = NOW() WHERE tag_serial = ?`
+	query := `UPDATE tag_stats SET trending_score = ?, trending_score_updated_at = NOW() WHERE tag_serial = ?`
 
 	err := conn.Exec(query, trendingScore, tagSerial).Error
 	if err != nil {
@@ -216,4 +216,33 @@ func (r *tagRepository) GetTagPairStatsBySerials(tx *gorm.DB, serials []string) 
 	}
 
 	return tagPairStats, nil
+}
+
+func (r *tagRepository) GetTagStats(tx *gorm.DB, pg *entity.Pagination) ([]*entity.TagStat, error) {
+	tagStats := []*entity.TagStat{}
+
+	db := r.gormDB.Table("tag_stats")
+
+	var total int64
+	if pg != nil {
+		if err := db.Count(&total).Error; err != nil {
+			return nil, fmt.Errorf("error repo get tag stats: %s", err.Error())
+		}
+		if total == 0 {
+			return nil, nil
+		}
+		pg.Total = int(total)
+
+		pg.SetPagination()
+		limit := pg.PageSize
+		offset := pg.GetOffset()
+
+		db = db.Limit(int(limit)).Offset(int(offset))
+	}
+
+	if err := db.Scan(&tagStats).Error; err != nil {
+		return nil, fmt.Errorf("error repo get tag stats: %s", err.Error())
+	}
+
+	return tagStats, nil
 }

@@ -254,3 +254,28 @@ func (h *articleHandler) GetVersionBySerial(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+func (h *articleHandler) UpdateTrendingScoreTags(c *gin.Context) {
+	pg := entity.Pagination{}
+	err := h.articleUsecase.UpdateTrendingScoreTags(&pg)
+	if err != nil {
+		switch errorutil.GetErrorType(err) {
+		case errorutil.ErrBadRequest:
+			c.JSON(http.StatusBadRequest, generalutil.MapAny{
+				errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusBadRequest, errorutil.GetOriginalError(err)),
+			})
+			return
+		default:
+			if c != nil {
+				c.JSON(http.StatusInternalServerError, generalutil.MapAny{
+					errorutil.Error: errorutil.CombineHTTPErrorMessage(http.StatusInternalServerError, err),
+				})
+				return
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		message: "tag trending score is updated",
+	})
+}

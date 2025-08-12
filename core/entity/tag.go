@@ -37,14 +37,18 @@ type TagDetail struct {
 }
 
 type TagStat struct {
-	TagSerial     string
-	UsageCount    float32
-	TrendingScore float32
-	UpdatedAt     time.Time
+	TagSerial              string
+	UsageCount             float32
+	TrendingScore          float32
+	UsageCountUpdatedAt    *time.Time
+	TrendingScoreUpdatedAt *time.Time
 }
 
 type TagPairStat struct {
 	Tag1Serial string
 	Tag2Serial string
 	UsageCount int
+}
+
+type GetTagStatsRequest struct {
 }

@@ -53,7 +53,8 @@ CREATE TABLE tag_stats (
     tag_serial VARCHAR(25) PRIMARY KEY REFERENCES tags(serial),
     usage_count INT DEFAULT 0,
     trending_score FLOAT DEFAULT 0,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    usage_count_updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    trending_score_updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE tag_pair_stats (

@@ -1,16 +1,26 @@
 services:
-  # app:
-  #   build:
-  #     context: .
-  #     args:
-  #       TARGET: app
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     DATABASE_URL: postgres://postgres:postgres@db:5432/database?sslmode=disable
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
+  app:
+    build:
+      context: .
+      args:
+        TARGET: app
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/database?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+  worker:
+    build:
+      context: .
+      args:
+        TARGET: worker
+    environment:
+      UPDATE_TAG_TRENDING_SCORE_SCHEDULE: "*/1 * * * *"
+    depends_on:
+      db:
+        condition: service_healthy
   db:
     platform: linux/x86_64
     image: postgres:14.1-alpine

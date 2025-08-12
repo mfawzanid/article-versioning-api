@@ -19,4 +19,5 @@ type TagRepositoryInterface interface {
 	IncrementTagPairStat(tx *gorm.DB, tag1Serial, tag2Serial string) error
 	DecrementTagPairStat(tx *gorm.DB, tag1Serial, tag2Serial string) error
 	GetTagPairStatsBySerials(tx *gorm.DB, serials []string) ([]*entity.TagPairStat, error)
+	GetTagStats(tx *gorm.DB, pg *entity.Pagination) ([]*entity.TagStat, error)
 }

@@ -33,6 +33,7 @@ type ArticleUsecaseInterface interface {
 	GetArticleLatestDetail(articleSerial string) (*entity.GetArticleLatestDetailResponse, error)
 	GetVersionsByArticleSerial(articleSerial string) (*entity.GetVersionsByArticleSerialResponse, error)
 	GetVersionBySerial(serial string) (*entity.Version, error)
+	UpdateTrendingScoreTags(pg *entity.Pagination) (err error)
 }
 
 func NewArticleUsecase(articleRepo repository.ArticleRepositoryInterface, tagRepo repository.TagRepositoryInterface, transactionPkg transactionutil.Transaction, cfg *config.Config) ArticleUsecaseInterface {
@@ -193,7 +194,13 @@ func (u *articleUsecase) UpdateArticleVersionStatus(req *entity.UpdateArticleVer
 	}
 
 	allAffectedTagSerials = generalutil.SanitizeDuplicateSerials(allAffectedTagSerials)
-	err = u.updateTrendingScore(tx, allAffectedTagSerials)
+
+	allTagStats, err := u.tagRepo.GetTagStatsBySerials(tx, allAffectedTagSerials)
+	if err != nil {
+		return err
+	}
+
+	err = u.updateTrendingScore(tx, allTagStats)
 	if err != nil {
 		return err
 	}
@@ -363,7 +370,12 @@ func (u *articleUsecase) DeleteArticle(articleSerial string) error {
 			return err
 		}
 
-		err = u.updateTrendingScore(tx, currPublishedVersion.TagSerials())
+		tagStats, err := u.tagRepo.GetTagStatsBySerials(tx, currPublishedVersion.TagSerials())
+		if err != nil {
+			return err
+		}
+
+		err = u.updateTrendingScore(tx, tagStats)
 		if err != nil {
 			return err
 		}
@@ -414,15 +426,10 @@ func (u *articleUsecase) calculateTrendingScore(usageCount int, lastUpdatedAt ti
 	return float32(usageCount) * float32(recencyFactor)
 }
 
-func (u *articleUsecase) updateTrendingScore(tx *gorm.DB, tagSerials []string) error {
-	tagStats, err := u.tagRepo.GetTagStatsBySerials(tx, tagSerials)
-	if err != nil {
-		return err
-	}
-
+func (u *articleUsecase) updateTrendingScore(tx *gorm.DB, tagStats []*entity.TagStat) error {
 	for _, tagStat := range tagStats {
-		newTrendingScore := u.calculateTrendingScore(int(tagStat.UsageCount), tagStat.UpdatedAt)
-		err = u.tagRepo.UpdateTagStat(tx, tagStat.TagSerial, newTrendingScore)
+		newTrendingScore := u.calculateTrendingScore(int(tagStat.UsageCount), *tagStat.UsageCountUpdatedAt)
+		err := u.tagRepo.UpdateTagStat(tx, tagStat.TagSerial, newTrendingScore)
 		if err != nil {
 			return err
 		}
@@ -534,4 +541,33 @@ func (u *articleUsecase) updateTagRelationshipScore(tx *gorm.DB, versionSerial s
 	finalScore := float32(totalScore) / float32(len(tagSerialPairCombination))
 
 	return u.articleRepo.UpdateTagRelationshipScore(tx, versionSerial, finalScore)
+}
+
+func (u *articleUsecase) UpdateTrendingScoreTags(pg *entity.Pagination) (err error) {
+	pg.SetToDefault()
+
+	tx := u.transactionPkg.InitTransaction()
+	defer func() {
+		u.transactionPkg.SettleTransaction(tx, err)
+	}()
+
+	for {
+		tagStats, err := u.tagRepo.GetTagStats(tx, pg)
+		if err != nil {
+			return err
+		}
+
+		err = u.updateTrendingScore(tx, tagStats)
+		if err != nil {
+			return err
+		}
+
+		if pg.Page == pg.TotalPage {
+			break
+		}
+
+		pg.Page++
+	}
+
+	return nil
 }

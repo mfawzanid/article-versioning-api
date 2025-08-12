@@ -87,5 +87,7 @@ func main() {
 	router.POST("/users/register", userHandler.RegisterUser)
 	router.POST("/users/login", userHandler.Login)
 
+	router.PUT("/tags/trending-score", articleHandler.UpdateTrendingScoreTags)
+
 	router.Run()
 }
